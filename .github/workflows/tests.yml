@@ -1,0 +1,35 @@
+name: Test Suite
+
+on:
+  [push, pull_request]
+
+jobs:
+  build:
+    name: Build and test on ${{ matrix.os }}, JDK ${{ matrix.java }}
+
+    strategy:
+      matrix:
+        java: [ '21' ]
+        os: [ 'ubuntu-latest', 'windows-latest', 'macos-latest' ]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'temurin'
+          cache: 'maven'
+      - name: Build with Maven
+        run: ./mvnw --batch-mode --update-snapshots verify
+      - name: Move and verify CORE
+        run: |
+          mv ./codelerity-core-bin/target/codelerity-core ./
+          ./codelerity-core/bin/codelerity --show-environment
+      - name: Run Test Suite
+        run: ./codelerity-core/bin/codelerity -f ./testsuite/
+

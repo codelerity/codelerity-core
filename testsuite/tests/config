@@ -1,0 +1,11 @@
+# Core tests
+
+core/testcheck
+core/components
+core/basic-multiprocess
+core/shared-delegates
+core/async-functions
+core/code-roots
+core/refs
+core/libraries
+core/custom-types
