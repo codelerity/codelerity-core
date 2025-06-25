@@ -19,9 +19,17 @@
 package com.codelerity.core.bin;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
+import org.praxislive.core.types.PArray;
+import org.praxislive.core.types.PString;
 import org.praxislive.launcher.Launcher;
 
 public class Main {
@@ -32,35 +40,41 @@ public class Main {
 
     private static class LauncherCtxt implements Launcher.Context {
 
-        private final String command;
-        private final String modulePath;
-        private final String classPath;
-
         private LauncherCtxt() {
-            command = ProcessHandle.current().info().command().orElse("java");
-            modulePath = System.getProperty("jdk.module.path");
-            classPath = System.getProperty("java.class.path");
         }
 
         @Override
         public ProcessBuilder createChildProcessBuilder(List<String> javaOptions,
                 List<String> arguments) {
-            List<String> cmd = new ArrayList<>();
-            cmd.add(command);
-            cmd.addAll(javaOptions);
-            if (modulePath == null || modulePath.isEmpty()) {
-                cmd.add("-classpath");
-                cmd.add(classPath);
-                cmd.add("com.codelerity.core.bin.Main");
-            } else {
-                cmd.add("--add-modules=ALL-DEFAULT");
-                cmd.add("-p");
-                cmd.add(modulePath);
-                cmd.add("-m");
-                cmd.add("com.codelerity.core.bin/com.codelerity.core.bin.Main");
+            boolean isWindows = System.getProperty("os.name", "")
+                    .toLowerCase(Locale.ROOT).contains("windows");
+            String basedir = System.getProperty("app.home");
+            if (basedir == null || basedir.isBlank()) {
+                throw new IllegalStateException("Cannot find app.home");
             }
+            Path bin = Path.of(basedir, "bin");
+            Path launcher;
+            try (Stream<Path> files = Files.list(bin)) {
+                launcher = files.filter(f -> {
+                    boolean isCmd = f.toString().endsWith(".cmd");
+                    return isWindows ? isCmd : !isCmd && Files.isExecutable(f);
+                }).findFirst()
+                        .orElseThrow(() -> new IllegalStateException("Cannot find launcher"));
+
+            } catch (IOException ex) {
+                throw new IllegalStateException("Cannot find launcher", ex);
+            }
+            List<String> cmd = new ArrayList<>();
+            cmd.add(launcher.toString());
             cmd.addAll(arguments);
-            return new ProcessBuilder(cmd);
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            Map<String, String> env = pb.environment();
+            env.put("JAVA_HOME", System.getProperty("java.home"));
+            env.put("JAVA_OPTS", javaOptions.stream()
+                    .map(PString::of)
+                    .collect(PArray.collector())
+                    .toString());
+            return pb;
         }
 
         @Override
